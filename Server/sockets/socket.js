@@ -2,25 +2,55 @@ const Message = require("../models/Message");
 const Room = require("../models/Room");
 
 module.exports = (io) => {
-  let onlineUsers = 0;
 
   io.on("connection", (socket) => {
     console.log("User connected");
+    
+    socket.on(
+      "join_room",
+      async (room) => {
 
-    onlineUsers++;
+      socket.rooms.forEach(
+        (r) => {
 
-    io.emit("online_users", onlineUsers);
+          if (
+            r !== socket.id
+          ) {
 
-    socket.on("join_room", async (room) => {
-      socket.leaveAll();
-      socket.join(room);
+            socket.leave(r);
 
-      const messages = await Message.find({ room })
-        .sort({ createdAt: 1 })
-        .limit(100);
+          }
 
-      socket.emit("load_messages", messages);
-    });
+        }
+      );
+
+        socket.join(room);
+
+        const messages =
+          await Message.find({
+            room,
+          })
+            .sort({
+              createdAt: 1,
+            })
+            .limit(100);
+
+        socket.emit(
+          "load_messages",
+          messages
+        );
+
+        const count =
+          io.sockets.adapter.rooms
+            .get(room)?.size || 0;
+
+        io.to(room).emit(
+          "online_users",
+          count
+        );
+
+      }
+    );
 
     socket.on("send_message", async (data) => {
       const newMessage = await Message.create(data);
@@ -212,19 +242,39 @@ module.exports = (io) => {
       }
     );
 
-    socket.on("disconnect", () => {
+    socket.on(
+      "disconnecting",
+      () => {
 
-      onlineUsers--;
+        socket.rooms.forEach(
+          (room) => {
 
-      io.emit(
-        "online_users",
-        onlineUsers
-      );
+            if (
+              room !== socket.id
+            ) {
 
-      console.log(
-        "User disconnected"
-      );
+              setTimeout(() => {
 
-    });
-  });
+                const count =
+                  io.sockets.adapter.rooms
+                    .get(room)?.size || 0;
+
+                io.to(room).emit(
+                  "online_users",
+                  count
+                );
+
+              }, 100);
+
+            }
+
+          }
+        );
+
+        console.log(
+          "User disconnected"
+        );
+      });
+    }
+  );
 };
