@@ -153,6 +153,15 @@ module.exports = (io) => {
 
         await room.save();
 
+        await Message.updateMany(
+          { room: oldName },
+          {
+            $set: {
+              room: newName,
+            },
+          }
+        );
+
         io.emit(
           "room_renamed",
           {
